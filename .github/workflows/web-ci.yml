@@ -1,16 +1,13 @@
 name: web CI
 
 # The checks every DabAZ web project runs before a change reaches its default
-# branch. Repositories call this instead of copying the steps, so a fix here
-# reaches all of them at once.
+# branch. The gate itself is the project's `pnpm check` script: this workflow
+# only installs and runs it, so "what passes" is defined once, in package.json,
+# next to the scripts it composes.
 #
 #   jobs:
 #     ci:
 #       uses: dabaz-official/.github/.github/workflows/web-ci.yml@main
-#
-# Every step is a flag because the projects do not all have the same scripts
-# yet. Turn a step on in the caller once package.json has that script; a step
-# pointing at a missing script fails the job, which is the point.
 on:
   workflow_call:
     inputs:
@@ -18,22 +15,6 @@ on:
         description: Node.js version to install.
         type: string
         default: "24"
-      lint:
-        description: Run `pnpm lint`.
-        type: boolean
-        default: true
-      typecheck:
-        description: Run `pnpm typecheck`.
-        type: boolean
-        default: true
-      test:
-        description: Run `pnpm test`.
-        type: boolean
-        default: true
-      build:
-        description: Run `pnpm build`.
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -66,18 +47,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        if: inputs.lint
-        run: pnpm lint
+      # Without this, a caller that forgot the script fails with pnpm's
+      # "Command check not found", which says nothing about what to do.
+      - name: Verify the gate exists
+        run: |
+          node -e '
+            const { scripts = {} } = require("./package.json");
+            if (!scripts.check) {
+              console.error("::error::package.json has no \"check\" script. Compose it from format:check, lint, typecheck, test, and build as in DabAgents rule 04.");
+              process.exit(1);
+            }
+          '
 
-      - name: Typecheck
-        if: inputs.typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        if: inputs.test
-        run: pnpm test
-
-      - name: Build
-        if: inputs.build
-        run: pnpm build
+      - name: Gate
+        run: pnpm check

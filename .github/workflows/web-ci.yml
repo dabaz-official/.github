@@ -1,0 +1,83 @@
+name: web CI
+
+# The checks every DabAZ web project runs before a change reaches its default
+# branch. Repositories call this instead of copying the steps, so a fix here
+# reaches all of them at once.
+#
+#   jobs:
+#     ci:
+#       uses: dabaz-official/.github/.github/workflows/web-ci.yml@main
+#
+# Every step is a flag because the projects do not all have the same scripts
+# yet. Turn a step on in the caller once package.json has that script; a step
+# pointing at a missing script fails the job, which is the point.
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to install.
+        type: string
+        default: "24"
+      lint:
+        description: Run `pnpm lint`.
+        type: boolean
+        default: true
+      typecheck:
+        description: Run `pnpm typecheck`.
+        type: boolean
+        default: true
+      test:
+        description: Run `pnpm test`.
+        type: boolean
+        default: true
+      build:
+        description: Run `pnpm build`.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # No version here: pnpm/action-setup reads `packageManager` from
+      # package.json, so each repository pins the tool once, in the place a
+      # human running the project also sees it.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      # `cache: pnpm` caches the pnpm store keyed on pnpm-lock.yaml.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        if: inputs.lint
+        run: pnpm lint
+
+      - name: Typecheck
+        if: inputs.typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        if: inputs.test
+        run: pnpm test
+
+      - name: Build
+        if: inputs.build
+        run: pnpm build
